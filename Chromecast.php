@@ -17,14 +17,18 @@ class Chromecast
     public $is_idle;
     public $is_error;
     public $current_volume;
+    public $start_time;
+    public $max_timeout;
 
     public function __construct()
     {
         $this->request_id = 1;
         $this->timeout = 30;
+        $this->max_timeout = 7;
         $this->is_idle = false;
         $this->is_error = false;
         $this->debug = false;
+        $this->start_time = time();
     }
 
     /**
@@ -123,7 +127,7 @@ class Chromecast
 
             if (preg_match("/level/s", $r)) {
                 preg_match("/\"level\":([^\,]*)/", $r, $o);
-                $this->current_volume = round($o[1],2);
+                $this->current_volume = round($o[1], 2);
             }
         }
 
@@ -209,15 +213,22 @@ class Chromecast
 
     public function sendPong()
     {
+
         $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.heartbeat", 0, "{\"type\":\"PONG\"}"]);
         $this->getCastMessage();
     }
 
     public function sendPing()
     {
-        // Officially run this every 5 seconds to keep the connection alive.
-        $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.heartbeat", 0, "{\"type\":\"PING\"}"]);
-        $this->getCastMessage();
+        // Stop sending Ping after 7 seconds
+        if ((time() - $this->start_time) > $this->max_timeout) {
+            $this->is_error = true;
+            $this->close();
+        } else {
+            // Officially run this every 5 seconds to keep the connection alive.
+            $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.heartbeat", 0, "{\"type\":\"PING\"}"]);
+            $this->getCastMessage();
+        }
     }
 
     public function checkSocketConnection()
@@ -263,7 +274,7 @@ class Chromecast
 
     public function sendCustomCommand($command)
     {
-        $urn =  trim($command[0]);
+        $urn = trim($command[0]);
         $type = trim($command[1]);
         $app_id = isset($command[2]) ? trim($command[2]) : "";
 
@@ -276,6 +287,7 @@ class Chromecast
 
     public function sendCommand($command)
     {
+
         if (count($command) >= 1) {
             $type = trim($command[0]);
             $app_id = isset($command[1]) ? trim($command[1]) : "";
@@ -326,7 +338,7 @@ class Chromecast
     {
         if (count($video) >= 4) {
             $app_id = trim($video[0]);
-            if (!empty($appid)) {
+            if (!empty($app_id)) {
                 $this->launch($app_id);
             }
 
@@ -341,7 +353,7 @@ class Chromecast
             $this->sendMessage("urn:x-cast:com.google.cast.media", $json);
 
             $r = "";
-            while (!preg_match("/\"playerState\":\"PLAYING\"/", $r)) {
+            while (!preg_match("/\"playerState\":\"PLAYING\"/", $r) && !$this->is_error) {
                 $r = $this->getCastMessage();
                 sleep(1);
             }
