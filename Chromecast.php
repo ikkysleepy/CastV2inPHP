@@ -23,7 +23,7 @@ class Chromecast
     public function __construct()
     {
         $this->request_id = 1;
-        $this->timeout = 30;
+        $this->timeout = 10;
         $this->max_timeout = 7;
         $this->is_idle = false;
         $this->is_error = false;
@@ -73,7 +73,7 @@ class Chromecast
             try {
                 $this->connectToSocket($ip);
             } catch (Exception $e) {
-                echo $e->getMessage(), "\n";
+                throw new Exception($e);
                 exit(0);
             }
         }
