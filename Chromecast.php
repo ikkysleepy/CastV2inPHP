@@ -84,7 +84,7 @@ class Chromecast
         $this->connectToApp();
 
         preg_match("/\"appId\":\"([^\"]*)/", $r, $m);
-        $this->app_id = $m[1];
+        $this->app_id = isset($m[1]) ? $m[1] : "";
     }
 
     public function scan($wait = 15)
@@ -129,6 +129,11 @@ class Chromecast
                 preg_match("/\"level\":([^\,]*)/", $r, $o);
                 $this->current_volume = round($o[1], 2);
             }
+
+            if ((time() - $this->start_time) > 2) {
+                break;
+            }
+
         }
 
         return $r;
@@ -193,6 +198,15 @@ class Chromecast
             preg_match("/\"mediaSessionId\":([^\,]*)/", $r, $m);
             if (isset($m[1])) {
                 $this->media_session_id = $m[1];
+
+                if ($this->debug) {
+                    echo $this->media_session_id;
+                }
+
+            }
+
+            if ((time() - $this->start_time) > 2) {
+                break;
             }
         }
     }
