@@ -11,6 +11,7 @@ class Chromecast
     public $transport_id;
     public $session_id;
     public $last_ip;
+    public $last_port;
     public $timeout;
     public $app_id;
     public $debug;
@@ -42,7 +43,7 @@ class Chromecast
         $context = stream_context_create($contextOptions);
         $this->socket = @stream_socket_client('ssl://' . $ip . ":" . $port, $errorCode, $errorMessage, $this->timeout, STREAM_CLIENT_CONNECT, $context);
         if (!$this->socket) {
-            throw new Exception("$errorMessage ($errorCode)");
+            throw new \Exception("$errorMessage ($errorCode)");
         }
     }
 
@@ -58,22 +59,24 @@ class Chromecast
         $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.connection", 0, "{\"type\":\"CONNECT\"}"], false);
     }
 
-    public function connect($friendlyNameOrIp)
+    public function connect($friendlyNameOrIp, $port = 8009)
     {
         if (ip2long($friendlyNameOrIp)) {
             $this->last_ip = $ip = $friendlyNameOrIp;
+            $this->last_port = $port;
         } else {
             $this->last_ip = $ip = $this->getIpFromFriendlyName($friendlyNameOrIp);
+            $this->last_port = $port;
         }
 
         try {
-            $this->connectToSocket($ip);
-        } catch (Exception $e) {
+            $this->connectToSocket($ip, $port);
+        } catch (\Exception $e) {
             // Try to re-connect because sometimes the socket connection fails to connect to the ip
             try {
-                $this->connectToSocket($ip);
-            } catch (Exception $e) {
-                throw new Exception($e);
+                $this->connectToSocket($ip, $port);
+            } catch (\Exception $e) {
+                throw new \Exception($e);
                 exit(0);
             }
         }
@@ -106,9 +109,13 @@ class Chromecast
             while (($this->transport_id == "" || $this->transport_id == $old_transport_id || $this->app_id != $my_app_id) && !$this->is_error) {
                 $r = $this->getCastMessage();
                 preg_match("/\"appId\":\"([^\"]*)/", $r, $m);
-                if ($m[1] == $this->app_id) {
-                    $my_app_id = $m[1];
+
+                if (isset($m[1])) {
+                    if ($m[1] == $this->app_id) {
+                        $my_app_id = $m[1];
+                    }
                 }
+
             }
         } else {
             // App is already launched, so reconnect
@@ -153,7 +160,7 @@ class Chromecast
 
         if (preg_match("/transportId/s", $r)) {
             preg_match("/transportId\"\:\"([^\"]*)/", $r, $m);
-            $this->transport_id = $m[1];
+            $this->transport_id = isset($m[1]) ? $m[1] : "";
         }
 
         if (preg_match("/isIdleScreen/s", $r)) {
@@ -252,11 +259,11 @@ class Chromecast
             stream_socket_shutdown($this->socket, STREAM_SHUT_WR);
 
             try {
-                $this->connectToSocket($this->last_ip);
-            } catch (Exception $e) {
+                $this->connectToSocket($this->last_ip, $this->last_port);
+            } catch (\Exception $e) {
                 try {
-                    $this->connectToSocket($this->last_ip);
-                } catch (Exception $e) {
+                    $this->connectToSocket($this->last_ip, $this->last_port);
+                } catch (\Exception $e) {
                     echo $e->getMessage(), "\n";
                     exit(0);
                 }
@@ -374,7 +381,7 @@ class Chromecast
 
             // Grab the mediaSessionId
             preg_match("/\"mediaSessionId\":([^\,]*)/", $r, $m);
-            $this->media_session_id = $m[1];
+            $this->media_session_id = isset($m[1]) ? $m[1] : "";
         }
     }
 }
