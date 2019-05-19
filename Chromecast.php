@@ -37,7 +37,7 @@ class Chromecast
      * @param int $port
      * @throws Exception
      */
-    public function connectToSocket($ip, $port = 8009)
+    public function connectToSocket(string $ip, int $port = 8009)
     {
         $contextOptions = ['ssl' => ['verify_peer' => false, 'verify_peer_name' => false,]]; // Ignore Chromecast's certificate.
         $context = stream_context_create($contextOptions);
@@ -59,7 +59,7 @@ class Chromecast
         $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.connection", 0, "{\"type\":\"CONNECT\"}"], false);
     }
 
-    public function connect($friendlyNameOrIp, $port = 8009)
+    public function connect(string $friendlyNameOrIp, int $port = 8009)
     {
         if (ip2long($friendlyNameOrIp)) {
             $this->last_ip = $ip = $friendlyNameOrIp;
@@ -77,7 +77,6 @@ class Chromecast
                 $this->connectToSocket($ip, $port);
             } catch (\Exception $e) {
                 throw new \Exception($e);
-                exit(0);
             }
         }
 
@@ -90,13 +89,13 @@ class Chromecast
         $this->app_id = isset($m[1]) ? $m[1] : "";
     }
 
-    public function scan($wait = 15)
+    public function scan(int $wait = 15):array
     {
         $mDNSChromecast = new mDNSChromecast();
         return $mDNSChromecast->scan($wait);
     }
 
-    public function launch($app_id)
+    public function launch(string $app_id)
     {
         if ($app_id != $this->app_id) {
             $this->app_id = $app_id;
@@ -124,7 +123,7 @@ class Chromecast
         }
     }
 
-    public function getStatus()
+    public function getStatus(): string
     {
         $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.receiver", 0, "{\"type\":\"GET_STATUS\",\"requestId\":" . $this->request_id . "}"]);
 
@@ -146,7 +145,7 @@ class Chromecast
         return $r;
     }
 
-    public function getCastMessage()
+    public function getCastMessage(): string
     {
         $this->checkSocketConnection();
         $r = fread($this->socket, 2000);
@@ -180,7 +179,7 @@ class Chromecast
         return $r;
     }
 
-    public function getIpFromFriendlyName($friendlyName)
+    public function getIpFromFriendlyName(string $friendlyName)
     {
         $results = $this->scan();
         $ip = "";
@@ -218,7 +217,7 @@ class Chromecast
         }
     }
 
-    public function sendMessage($urn, $message)
+    public function sendMessage(string $urn, string $message)
     {
         // Override - if the $urn is urn:x-cast:com.google.cast.receiver then
         // send to receiver-0 and not the running app
@@ -234,7 +233,6 @@ class Chromecast
 
     public function sendPong()
     {
-
         $this->sendCastMessage(["sender-0", "receiver-0", "urn:x-cast:com.google.cast.tp.heartbeat", 0, "{\"type\":\"PONG\"}"]);
         $this->getCastMessage();
     }
@@ -265,13 +263,12 @@ class Chromecast
                     $this->connectToSocket($this->last_ip, $this->last_port);
                 } catch (\Exception $e) {
                     echo $e->getMessage(), "\n";
-                    exit(0);
                 }
             }
         }
     }
 
-    public function sendCastMessage($msg = [], $updateRequestId = true)
+    public function sendCastMessage(array $msg, bool $updateRequestId = true)
     {
         if ($this->debug) {
             print_r($msg);
@@ -293,7 +290,7 @@ class Chromecast
         }
     }
 
-    public function sendCustomCommand($command)
+    public function sendCustomCommand(array $command)
     {
         $urn = trim($command[0]);
         $type = trim($command[1]);
@@ -306,7 +303,7 @@ class Chromecast
         $this->sendMessage($urn, '{"type":"' . $type . '"}');
     }
 
-    public function sendCommand($command)
+    public function sendCommand(array $command)
     {
 
         if (count($command) >= 1) {
@@ -355,7 +352,7 @@ class Chromecast
 
     }
 
-    private function play($video)
+    private function play(array $video)
     {
         if (count($video) >= 4) {
             $app_id = trim($video[0]);
@@ -383,5 +380,41 @@ class Chromecast
             preg_match("/\"mediaSessionId\":([^\,]*)/", $r, $m);
             $this->media_session_id = isset($m[1]) ? $m[1] : "";
         }
+    }
+
+    public function sendCommands(string $host, array $command, int $repeat): array
+    {
+
+        $total_start_time = time();
+        $success = 0;
+        $error = 0;
+        $results = [];
+        $error_msg = [];
+        for ($i = 0; $i < $repeat; $i++) {
+            $error_num = "";
+            $error_str = "";
+            $cc = new Chromecast();
+            try {
+                $cc->connect($host);
+                $cc->sendCommand($command);
+                $cc->close();
+                $success++;
+            } catch (\Exception $e) {
+                $error++;
+                $error_num = "500";
+                $error_str = "Could not Connect to Chromecast";
+                array_push($error_msg, [$command, $error_str]);
+
+            }
+            array_push($results, [$error_num, "", $error_str]);
+        }
+
+        // Total Time
+        $total_start_time = (time() - $total_start_time);
+
+        // Return results
+        return ['error' => $error, 'success' => $success, 'results' => $results, 'error_msg' => $error_msg, 'total_time' => $total_start_time];
+
+
     }
 }
